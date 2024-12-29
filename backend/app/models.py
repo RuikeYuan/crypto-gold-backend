@@ -1,45 +1,33 @@
 # models.py
 from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
 class Asset(models.Model):
-    currentPrice = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-
-    def updateCurrentPrice(self):
-        return
-
-    def getPriceHistory(self):
-        return
-
-    def getCurrentPrice(self):
-        return
-
-class Metal(Asset):
-    metalName = models.CharField(max_length=50, choices=[('Gold', 'gold'), ('Silver', 'silver')])
-
-class Crypto(Asset):  # Inherit from Asset without defining a conflicting field
-    rank = models.IntegerField()
     name = models.CharField(max_length=100)
     symbol = models.CharField(max_length=10)
-    current_price = models.FloatField()
-    market_cap = models.FloatField()
-    volume_24h = models.FloatField()
-    change_percent_24h = models.FloatField()
+
+    class Meta:
+        abstract = True  # Define this as an abstract base class
+
+class Metal(Asset):
+    metalName = models.CharField(max_length=50, choices=[('Gold', 'gold'), ('Silver', 'silver')],default="")
+
+class Crypto(Asset):
+    rank = models.IntegerField(default=0)
+    name = models.CharField(max_length=100, default="")
+    symbol = models.CharField(max_length=10, default="")
+    current_price = models.FloatField(default=0.0)
+    market_cap = models.FloatField(default=0.0)  # Market cap in USD
+    volume_24h = models.FloatField(default=0.0)  # 24h volume in USD
+    change_percent_24h = models.FloatField(default=0.0)
     timestamp = models.DateTimeField(auto_now_add=True)
 
-class Btc(Crypto):
-    pass
-
-class Eth(Crypto):
-    pass
-
-class Sol(Crypto):
-    pass
-
-class Doge(Crypto):
-    pass
+    def __str__(self):
+        return f"{self.name} ({self.symbol})"
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
@@ -67,6 +55,10 @@ class User(AbstractUser):
                 total_loss += Decimal(transaction.price) * transaction.quantity
         return total_loss
 
+
+
+
+
 class Transaction(models.Model):
     ACTION_CHOICES = [
         ('buy', 'Buy'),
@@ -79,45 +71,68 @@ class Transaction(models.Model):
 
     trans_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='transactions')
-    asset = models.ForeignKey(Asset, on_delete=models.CASCADE)
+
+    # Use a Generic Foreign Key
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    asset = GenericForeignKey('content_type', 'object_id')
+
     action = models.CharField(max_length=4, choices=ACTION_CHOICES)
     quantity = models.DecimalField(max_digits=15, decimal_places=8, validators=[MinValueValidator(0)])
     price = models.DecimalField(max_digits=15, decimal_places=2)
     time = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='processing')
 
-class Post(models.Model):
-    post_id = models.AutoField(primary_key=True)
-    author = models.ForeignKey(User, on_delete=models.CASCADE)
-    content = models.TextField()
-    time = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return f"Transaction {self.trans_id} - {self.action} {self.quantity} of {self.asset.name}"
 
-class Reply(models.Model):
-    reply_id = models.AutoField(primary_key=True)
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='replies')
-    author = models.ForeignKey(User, on_delete=models.CASCADE)
-    content = models.TextField()
-    time = models.DateTimeField(auto_now_add=True)
+    def get_asset_type(self):
+        """Returns the type of asset: 'metal' or 'crypto'"""
+        if isinstance(self.asset, Metal):
+            return 'metal'
+        elif isinstance(self.asset, Crypto):
+            return 'crypto'
+        return 'unknown'
 
-class Forum(models.Model):
-    name = models.CharField(max_length=100)
-    posts = models.ManyToManyField(Post, related_name='forums')
+    def __str__(self):
+        return f"Transaction {self.trans_id} - {self.action} {self.quantity} of {self.asset.name}"
+
+    def get_asset_type(self):
+        """Returns the type of asset: 'metal' or 'crypto'"""
+        if isinstance(self.asset, Metal):
+            return 'metal'
+        elif isinstance(self.asset, Crypto):
+            return 'crypto'
+        return 'unknown'
+
+    def __str__(self):
+        return f"Transaction {self.trans_id} - {self.action} {self.quantity} of {self.asset.name}"
+
+    def get_asset_type(self):
+        """Returns the type of asset: 'metal' or 'crypto'"""
+        if isinstance(self.asset, Metal):
+            return 'metal'
+        elif isinstance(self.asset, Crypto):
+            return 'crypto'
+        return 'unknown'
 
 class CryptoHistory(models.Model):
-    price = models.FloatField()
-    timestamp = models.DateTimeField()
+    symbol = models.CharField(max_length=10)
+    time = models.BigIntegerField(null=True, blank=True)
+    price = models.DecimalField(max_digits=20, decimal_places=10)
+    date = models.DateTimeField()
+    circulatingSupply = models.DecimalField(max_digits=20, decimal_places=10, default=Decimal(0))
+    interval = models.CharField(max_length=5, choices=[
+        ('m1', '1 Minute'),
+        ('m5', '5 Minutes'),
+        ('m15', '15 Minutes'),
+        ('m30', '30 Minutes'),
+        ('h1', '1 Hour'),
+        ('h2', '2 Hours'),
+        ('h6', '6 Hours'),
+        ('h12', '12 Hours'),
+        ('d1', '1 Day'),
+    ], default='d1')
 
     class Meta:
-        abstract = True
-
-class BtcHistory(CryptoHistory):
-    pass
-
-class EthHistory(CryptoHistory):
-    pass
-
-class SolHistory(CryptoHistory):
-    pass
-
-class DogeHistory(CryptoHistory):
-    pass
+        unique_together = ('symbol', 'time', 'interval')

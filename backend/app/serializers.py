@@ -1,8 +1,6 @@
 # serializers.py
-from rest_framework import serializers
-from .models import User, Crypto, Metal, Transaction, Post, Reply, CryptoHistory
+from .models import Crypto, Metal, Transaction, CryptoHistory
 from django.db import models
-
 
 # filepath: /Users/ruikeyuan/Desktop/endpoints/backend/app/serializers.py
 from rest_framework import serializers
@@ -41,7 +39,13 @@ class MetalSerializer(serializers.ModelSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ('trans_id', 'user', 'asset', 'action', 'quantity', 'price', 'time', 'status')
+        fields = ['trans_id', 'user', 'asset', 'action', 'quantity', 'price', 'time', 'status', 'asset_type']
+
+    asset_type = serializers.SerializerMethodField()
+
+    @staticmethod
+    def get_asset_type(obj):
+        return obj.get_asset_type()
 
     def validate(self, data):
         user = data['user']
@@ -80,14 +84,3 @@ class CryptoHistorySerializer(serializers.ModelSerializer):
         model = CryptoHistory
         fields = ('asset', 'price_usd', 'time', 'circulating_supply', 'date')
 
-class ReplySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Reply
-        fields = ('reply_id', 'post', 'author', 'content', 'time')
-
-class PostSerializer(serializers.ModelSerializer):
-    replies = ReplySerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Post
-        fields = ('post_id', 'author', 'content', 'time', 'replies')
